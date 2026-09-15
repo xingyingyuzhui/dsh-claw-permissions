@@ -423,7 +423,7 @@ test('host named exports and routes', () => {
     '/dsh-session-permissions/write',
     '/dsh-session-permissions/reset',
   ])
-  assert.deepEqual(events, ['agent/session-start'])
+  assert.deepEqual(events, ['agent/created'])
   _internal.setDshHome(tmpdir())
 })
 
@@ -460,10 +460,10 @@ test('permissions pins a Claw session and never widens a tighter sandbox', async
     on(name, fn) { events[name] = fn; return () => {} },
     effect() {},
   })
-  events['agent/session-start']({ agent: { session } })
+  events['agent/created']({ agent: { session }, source: 'startup' })
   assert.ok(appended.some((row) => row.type === 'sandbox/mode' && row.data.mode === 'read-only'))
   const after = appended.length
-  events['agent/session-start']({ agent: { session } })
+  events['agent/created']({ agent: { session }, source: 'startup' })
   assert.equal(appended.length, after)
 
   const wide = []
@@ -473,6 +473,6 @@ test('permissions pins a Claw session and never widens a tighter sandbox', async
     events: [],
     append(type, data) { wide.push({ type, data }) },
   }
-  events['agent/session-start']({ agent: { session: project } })
+  events['agent/created']({ agent: { session: project }, source: 'startup' })
   assert.equal(wide.length, 0)
 })

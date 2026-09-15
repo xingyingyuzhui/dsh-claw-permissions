@@ -162,8 +162,9 @@ export function apply(ctx) {
     })
     : function () {}
 
+  // DSH 0.1.6+: pin sandbox on agent/created (serial) so the first turn sees the tight mode.
   const stopStart = typeof ctx.on === 'function'
-    ? ctx.on('agent/session-start', (payload) => {
+    ? ctx.on('agent/created', (payload) => {
       pinSession(payload && payload.agent && payload.agent.session)
     })
     : function () {}
