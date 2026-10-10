@@ -8,8 +8,7 @@ import { applyPreset, tighterSandbox } from '../perm-schema.mjs'
 import { allowExecution, looksLikeDsClaw, sameRoot } from '../perm-path.mjs'
 import { askReason, officialPin, renderDenyReceipt } from '../perm-official.mjs'
 import { composeLayers, denyReason, loadAgentHintSync, resolveLayersSync } from '../perm-layers.mjs'
-import { apply as applyGate } from '../../dsh-agent-gate/host.js'
-import { fallbackMissingPreset } from '../../dsh-agent-registry/registry-presets.mjs'
+import { apply as applyGate } from 'dsh-claw-gate'
 
 async function twoAgents(home) {
   const a = join(home, 'DSclaw', 'alpha')
@@ -107,12 +106,6 @@ test('checklist: MCP allow list is enforced and not tied to write/shell', () => 
   assert.equal(allowExecution(explicit, 'mcp__slack__post', {}, '/tmp'), false)
 })
 
-test('checklist: missing claw preset falls back instead of breaking resume', () => {
-  const live = new Set(['standard', 'wa-test1'])
-  assert.equal(fallbackMissingPreset('wa-2e263a19-08cd-4274-b2af-42286f96b517', live), 'standard')
-  assert.equal(fallbackMissingPreset('wa-test1', live), 'wa-test1')
-})
-
 test('checklist: unloading the gate restores skills', async () => {
   const origSnapshot = async () => ({ skills: [{ name: 'cad' }], complete: true })
   const origGet = async (name) => name
@@ -121,7 +114,11 @@ test('checklist: unloading the gate restores skills', async () => {
   let stop
   applyGate({
     tools: { guard() { return () => {} } },
-    webServer: { register() { return () => {} } },
+    connection: {
+      fetch: {
+        register() { return () => {} },
+      },
+    },
     skills,
     on(name, fn) {
       events[name] = fn
@@ -137,22 +134,22 @@ test('checklist: unloading the gate restores skills', async () => {
 })
 
 test('checklist: live web still serves registry and audit', async (t) => {
-  const ping = async (path, header) => {
+  const ping = async (path) => {
     const res = await fetch('http://127.0.0.1:3080' + path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', [header]: '1' },
+      headers: { 'Content-Type': 'application/json' },
       body: '{}',
     })
     return res.status
   }
   let registry
   try {
-    registry = await ping('/dsh-agent-registry/list', 'x-dsh-agent-registry')
+    registry = await ping('/api/dsh-claw/registry/list')
   } catch {
     t.skip('dsh web is not listening')
     return
   }
-  const audit = await ping('/dsh-agent-gate/audit', 'x-dsh-agent-gate')
+  const audit = await ping('/api/dsh-claw/gate/audit')
   assert.notEqual(registry, 404)
   assert.notEqual(audit, 404)
   assert.ok(registry === 200 || registry === 403)

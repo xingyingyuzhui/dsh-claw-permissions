@@ -28,7 +28,7 @@ import {
   tighterSandbox,
   toggleTool,
   workspaceAccessOf,
-} from '../dsh-agent-policy/policy-schema.mjs'
+} from 'dsh-claw-policy/schema'
 
 export {
   APPROVAL_IDS,

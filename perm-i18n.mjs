@@ -1,4 +1,4 @@
-export const NS = 'dsh-session-permissions'
+export const NS = 'dsh-claw-permissions'
 
 export const COPY = {
   zh: {

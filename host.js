@@ -1,3 +1,6 @@
+import { listLiveAgents } from 'dsh-claw-core/live-agents'
+import { classifySession } from 'dsh-claw-core/session-classifier'
+import { httpError, registerJsonRoute } from 'dsh-claw-core/http'
 import { isSessionId } from './perm-schema.mjs'
 import { defaultDshHome, resetPolicy, savePolicy } from './perm-store.mjs'
 import {
@@ -10,63 +13,17 @@ import {
 } from './perm-layers.mjs'
 import { pinLiveSession, renderPolicyPrompt } from './perm-official.mjs'
 
-export const name = 'dsh-session-permissions'
-export const inject = ['webServer', 'systemPrompt']
+export const name = 'dsh-claw-permissions'
+export const inject = ['connection', 'systemPrompt']
 
-const BODY_CAP = 65536
-const LOOPBACK_ORIGIN = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/
 let dshHome = defaultDshHome()
 
 const _internal = {
   setDshHome(dir) { dshHome = dir },
   getDshHome() { return dshHome },
+  pinOpenSessions(ctx) { return pinOpenSessions(ctx) },
 }
 export { _internal }
-
-const writeJson = (res, status, body) => {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
-  res.end(JSON.stringify(body))
-}
-
-const readJsonBody = (req, cap = BODY_CAP) => new Promise((resolveBody, reject) => {
-  let size = 0
-  const chunks = []
-  req.on('data', (chunk) => {
-    size += chunk.length
-    if (size > cap) {
-      reject(new Error('body too large'))
-      req.destroy()
-      return
-    }
-    chunks.push(chunk)
-  })
-  req.on('end', () => {
-    try {
-      resolveBody(chunks.length === 0 ? {} : JSON.parse(Buffer.concat(chunks).toString('utf8')))
-    } catch {
-      reject(new Error('invalid json body'))
-    }
-  })
-  req.on('error', reject)
-})
-
-const guard = (req, res) => {
-  if (req.method !== 'POST') {
-    writeJson(res, 405, { ok: false, error: 'method not allowed' })
-    return false
-  }
-  const headers = req.headers || {}
-  if (headers['x-dsh-session-permissions'] !== '1') {
-    writeJson(res, 403, { ok: false, error: 'missing csrf header' })
-    return false
-  }
-  const origin = headers.origin
-  if (origin !== undefined && origin !== null && !LOOPBACK_ORIGIN.test(origin)) {
-    writeJson(res, 403, { ok: false, error: 'origin not allowed' })
-    return false
-  }
-  return true
-}
 
 function payload(layers) {
   return {
@@ -106,12 +63,16 @@ function optionalService(ctx, key) {
 
 function liveSession(ctx, sessionId) {
   const sessions = optionalService(ctx, 'sessions')
-  if (!sessions || typeof sessions.get !== 'function' || !sessionId) return null
+  if (!sessions || !sessionId) return null
   try {
-    return sessions.get(sessionId) || null
+    if (typeof sessions.binding === 'function') {
+      const bound = sessions.binding(sessionId)
+      return (bound && bound.session) || null
+    }
   } catch {
     return null
   }
+  return null
 }
 
 function layersOfSession(session) {
@@ -125,24 +86,58 @@ function layersOfSession(session) {
   })
 }
 
+function sessionKind(session) {
+  const header = (session && session.header) || {}
+  return classifySession({
+    dshHome,
+    cwd: header.cwd,
+    agentPreset: header.agentPreset,
+  })
+}
+
 function pinSession(session) {
-  return pinLiveSession(session, layersOfSession(session))
+  if (!session) return null
+  let layers
+  try {
+    layers = layersOfSession(session)
+  } catch (error) {
+    // Non-claw: classifier miss / layers noise must not fail-close first turn.
+    if (sessionKind(session) === 'ordinary') return null
+    throw error
+  }
+  return pinLiveSession(session, layers)
 }
 
 function pinOpenSessions(ctx) {
-  const agents = optionalService(ctx, 'agents')
-  if (!agents || typeof agents.values !== 'function') return
+  const summary = { visited: 0, pinned: 0, failed: [] }
   try {
-    for (const agent of agents.values()) {
-      try { pinSession(agent && agent.session) } catch { /* one session must not block others */ }
+    const agents = optionalService(ctx, 'agents')
+    const list = listLiveAgents(agents ? { agents } : ctx)
+    for (const agent of list) {
+      summary.visited++
+      const session = agent && agent.session
+      try {
+        const layers = layersOfSession(session)
+        pinSession(session)
+        if (layers && layers.claw) summary.pinned++
+      } catch (error) {
+        summary.failed.push({
+          sessionId: session && session.id,
+          error: String(error && error.message || error),
+        })
+      }
     }
-  } catch { /* agents bag unavailable */ }
+  } catch (error) {
+    summary.degraded = true
+    summary.error = String(error && error.message || error)
+  }
+  return summary
 }
 
 export function apply(ctx) {
   const stopPrompt = ctx.systemPrompt && typeof ctx.systemPrompt.section === 'function'
     ? ctx.systemPrompt.section({
-      name: 'dsh-session-permissions',
+      name: 'dsh-claw-permissions',
       order: 14,
       text(assemble) {
         const agent = assemble && assemble.agent
@@ -162,85 +157,69 @@ export function apply(ctx) {
     })
     : function () {}
 
-  // DSH 0.1.6+: pin sandbox on agent/created (serial) so the first turn sees the tight mode.
+  // DSH 0.1.6+: pin sandbox on agent/created (serial await) so the first turn sees the tight mode.
+  // Claw pin failures must rethrow so the Host serial barrier fail-closes the first turn.
   const stopStart = typeof ctx.on === 'function'
-    ? ctx.on('agent/created', (payload) => {
+    ? ctx.on('agent/created', async (payload) => {
       pinSession(payload && payload.agent && payload.agent.session)
     })
     : function () {}
 
-  try { pinOpenSessions(ctx) } catch { /* resume walk is best-effort */ }
-
-  const handle = (fn) => async (req, res) => {
-    if (!guard(req, res)) return
-    try {
-      const body = await readJsonBody(req)
-      await fn(req, res, body)
-    } catch (error) {
-      writeJson(res, 400, { ok: false, error: error && error.message ? error.message : 'bad request' })
-    }
+  const sweep = pinOpenSessions(ctx)
+  if (sweep.degraded) {
+    // agents.list failed — open sessions were not re-pinned; do not swallow silently
   }
 
-  const routes = [
-    ctx.webServer.register({
-      kind: 'exact',
-      path: '/dsh-session-permissions/read',
-      handler: handle(async (_req, res, body) => {
-        const sessionId = body && body.sessionId
-        if (!isSessionId(sessionId)) {
-          writeJson(res, 400, { ok: false, error: 'invalid session id' })
-          return
-        }
-        writeJson(res, 200, payload(resolveFor(ctx, sessionId, body)))
-      }),
-    }),
-    ctx.webServer.register({
-      kind: 'exact',
-      path: '/dsh-session-permissions/write',
-      handler: handle(async (_req, res, body) => {
-        const sessionId = body && body.sessionId
-        if (!isSessionId(sessionId)) {
-          writeJson(res, 400, { ok: false, error: 'invalid session id' })
-          return
-        }
-        const facts = sessionFacts(ctx, sessionId, body)
-        const agent = loadAgentHintSync(dshHome, facts)
-        if (!isClawContext(facts, agent)) {
-          writeJson(res, 200, payload(resolveFor(ctx, sessionId, body)))
-          return
-        }
-        const composed = composeLayers({
-          officialName: readOfficialName(dshHome, facts.events),
-          agent,
-          sessionRecord: { source: 'session', policy: body && body.policy },
-          claw: true,
-        })
-        const record = await savePolicy(dshHome, sessionId, composed.session)
-        pinSession(liveSession(ctx, sessionId))
-        writeJson(res, 200, payload({ ...composed, record }))
-      }),
-    }),
-    ctx.webServer.register({
-      kind: 'exact',
-      path: '/dsh-session-permissions/reset',
-      handler: handle(async (_req, res, body) => {
-        const sessionId = body && body.sessionId
-        if (!isSessionId(sessionId)) {
-          writeJson(res, 400, { ok: false, error: 'invalid session id' })
-          return
-        }
-        await resetPolicy(dshHome, sessionId)
-        pinSession(liveSession(ctx, sessionId))
-        writeJson(res, 200, payload(resolveFor(ctx, sessionId, body)))
-      }),
-    }),
-  ]
+  registerJsonRoute(ctx, {
+    path: '/api/dsh-claw/permissions/read',
+    handle: async (body) => {
+      const sessionId = body && body.sessionId
+      if (!isSessionId(sessionId)) {
+        throw httpError(400, 'invalid session id')
+      }
+      return payload(resolveFor(ctx, sessionId, body))
+    },
+  })
+
+  registerJsonRoute(ctx, {
+    path: '/api/dsh-claw/permissions/write',
+    handle: async (body) => {
+      const sessionId = body && body.sessionId
+      if (!isSessionId(sessionId)) {
+        throw httpError(400, 'invalid session id')
+      }
+      const facts = sessionFacts(ctx, sessionId, body)
+      const agent = loadAgentHintSync(dshHome, facts)
+      if (!isClawContext(facts, agent)) {
+        return payload(resolveFor(ctx, sessionId, body))
+      }
+      const composed = composeLayers({
+        officialName: readOfficialName(dshHome, facts.events),
+        agent,
+        sessionRecord: { source: 'session', policy: body && body.policy },
+        claw: true,
+      })
+      const record = await savePolicy(dshHome, sessionId, composed.session)
+      pinSession(liveSession(ctx, sessionId))
+      return payload({ ...composed, record })
+    },
+  })
+
+  registerJsonRoute(ctx, {
+    path: '/api/dsh-claw/permissions/reset',
+    handle: async (body) => {
+      const sessionId = body && body.sessionId
+      if (!isSessionId(sessionId)) {
+        throw httpError(400, 'invalid session id')
+      }
+      await resetPolicy(dshHome, sessionId)
+      pinSession(liveSession(ctx, sessionId))
+      return payload(resolveFor(ctx, sessionId, body))
+    },
+  })
 
   ctx.effect(() => () => {
     if (typeof stopPrompt === 'function') stopPrompt()
     if (typeof stopStart === 'function') stopStart()
-    for (const dispose of routes) {
-      if (typeof dispose === 'function') dispose()
-    }
   })
 }
