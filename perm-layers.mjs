@@ -167,7 +167,11 @@ export function sessionFacts(ctx, sessionId, body) {
   let events
   try {
     const sessions = ctx && ctx.sessions
-    const session = sessions && typeof sessions.get === 'function' ? sessions.get(sessionId) : null
+    let session = null
+    if (sessions && typeof sessions.binding === 'function') {
+      const bound = sessions.binding(sessionId)
+      session = bound && bound.session
+    }
     if (session) {
       const header = session.header || {}
       cwd = header.cwd || cwd

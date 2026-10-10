@@ -44,7 +44,7 @@ export function createPermissionPage(React, t, post, toast, subscribeLocale) {
 
     const load = React.useCallback(() => {
       if (!sessionId) return Promise.resolve()
-      return post('/dsh-session-permissions/read', { sessionId, cwd }).then((data) => {
+      return post('/api/dsh-claw/permissions/read', { sessionId, cwd }).then((data) => {
         applyLayers(data)
       }).catch((err) => toast(String(err.message || t('fail'))))
     }, [sessionId, cwd, applyLayers])
@@ -58,7 +58,7 @@ export function createPermissionPage(React, t, post, toast, subscribeLocale) {
     function save() {
       if (!sessionId || !policy) return
       setBusy(true)
-      post('/dsh-session-permissions/write', { sessionId, cwd, policy }).then((data) => {
+      post('/api/dsh-claw/permissions/write', { sessionId, cwd, policy }).then((data) => {
         applyLayers(data)
         toast(t('saved'))
       }).catch((err) => toast(String(err.message || t('fail')))).finally(() => setBusy(false))
@@ -67,7 +67,7 @@ export function createPermissionPage(React, t, post, toast, subscribeLocale) {
     function reset() {
       if (!sessionId) return
       setBusy(true)
-      post('/dsh-session-permissions/reset', { sessionId, cwd }).then((data) => {
+      post('/api/dsh-claw/permissions/reset', { sessionId, cwd }).then((data) => {
         applyLayers(data)
       }).catch((err) => toast(String(err.message || t('fail')))).finally(() => setBusy(false))
     }

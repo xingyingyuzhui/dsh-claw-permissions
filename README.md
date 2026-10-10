@@ -1,4 +1,4 @@
-# dsh-session-permissions · 会话权限
+# dsh-claw-permissions · 会话权限
 
 打开任意会话后，会话区会多一个 **权限** tab。
 
@@ -13,22 +13,22 @@ Claw 区的 Agent 和会话都到不了官方最高权限 `danger-full-access`�
 
 Claw 没有单独保存时，本会话继承天花板，不会再假装成 research 只读。保存时会按天花板收紧；超限选项在 UI 里不可选。
 
-本插件算三层交集、画会话「权限」tab，并给 Claw 会话钉官方 `sandbox/mode`（只收紧，不放宽）。`BOOTSTRAP.md` 还在时，官方沙箱会先钉到可写本工作区，闸只放行人设文件和 `ask_user_question`。真正拦截、一次性审批和审计在 `dsh-agent-gate`。建议一起装闸。
+本插件算三层交集、画会话「权限」tab，并给 Claw 会话钉官方 `sandbox/mode`（只收紧，不放宽）。`BOOTSTRAP.md` 还在时，官方沙箱会先钉到可写本工作区，闸只放行人设文件和 `ask_user_question`。真正拦截、一次性审批和审计在 `dsh-claw-gate`。建议一起装闸。
 
 卸掉闸之后，已经开着的和之后新开的 Claw 会话只要本插件还在，官方文件沙箱仍会钉住。MCP / 技能 / 路径拦截会停。
 
 ## 安装
 
 ```sh
-dsh plugin --profile web add github:xingyingyuzhui/dsh-session-permissions
+dsh plugin --profile web add github:xingyingyuzhui/dsh-claw-permissions
 ```
 
-装完重启 `dsh web`。建议同时安装 `dsh-agent-gate`。
+装完重启 `dsh web`。建议同时安装 `dsh-claw-gate`。
 
 本地开发：
 
 ```sh
-dsh plugin --profile web add link:/abs/path/to/dsh-session-permissions
+dsh plugin --profile web add link:/abs/path/to/dsh-claw-permissions
 ```
 
 改源码后执行 `npm run build`，不要手改生成的 `client.js`。
@@ -40,7 +40,7 @@ dsh plugin --profile web add link:/abs/path/to/dsh-session-permissions
 ## 卸载
 
 ```sh
-dsh plugin --profile web remove dsh-session-permissions
+dsh plugin --profile web remove dsh-claw-permissions
 ```
 
 ## License

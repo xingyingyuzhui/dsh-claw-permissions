@@ -408,21 +408,29 @@ test('workspace sessions stay official-only even with leftover suite policy', as
 })
 
 test('host named exports and routes', () => {
-  assert.equal(name, 'dsh-session-permissions')
-  assert.deepEqual(inject, ['webServer', 'systemPrompt'])
+  assert.equal(name, 'dsh-claw-permissions')
+  assert.deepEqual(inject, ['connection', 'systemPrompt'])
   const routes = []
   const events = []
   apply({
-    webServer: { register(entry) { routes.push(entry); return () => {} } },
+    connection: {
+      fetch: {
+        register(entry) { routes.push(entry); return () => {} },
+      },
+    },
     systemPrompt: { section() { return () => {} } },
     on(name, fn) { events.push(name); return () => {} },
     effect() {},
   })
   assert.deepEqual(routes.map((row) => row.path), [
-    '/dsh-session-permissions/read',
-    '/dsh-session-permissions/write',
-    '/dsh-session-permissions/reset',
+    '/api/dsh-claw/permissions/read',
+    '/api/dsh-claw/permissions/write',
+    '/api/dsh-claw/permissions/reset',
   ])
+  for (const row of routes) {
+    assert.deepEqual(row.methods, ['POST'])
+    assert.equal(row.requestBody, 'buffered')
+  }
   assert.deepEqual(events, ['agent/created'])
   _internal.setDshHome(tmpdir())
 })
@@ -455,7 +463,11 @@ test('permissions pins a Claw session and never widens a tighter sandbox', async
   }
   const events = {}
   apply({
-    webServer: { register() { return () => {} } },
+    connection: {
+      fetch: {
+        register() { return () => {} },
+      },
+    },
     systemPrompt: { section() { return () => {} } },
     on(name, fn) { events[name] = fn; return () => {} },
     effect() {},

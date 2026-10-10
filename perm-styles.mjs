@@ -1,4 +1,4 @@
-export const ATTR = 'data-dsh-session-permissions'
+export const ATTR = 'data-dsh-claw-permissions'
 
 export const CSS = [
   'body[' + ATTR + '] .dsp-page{display:flex;flex-direction:column;gap:18px;width:100%;max-width:720px;margin:0 auto;padding:8px 24px 36px;color:var(--dsw-alias-label-primary);box-sizing:border-box;overflow:visible}',

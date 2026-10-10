@@ -12,7 +12,7 @@ test('generated client keeps the factory contract', () => {
   const check = spawnSync(process.execPath, ['--check', dest], { encoding: 'utf8' })
   assert.equal(check.status, 0, check.stderr)
   assert.match(src, /Do not edit by hand/)
-  assert.match(src, /id: 'dsh-session-permissions'/)
+  assert.match(src, /id: 'dsh-claw-permissions'/)
   assert.match(src, /inject = \['slots', 'locale'\]/)
   assert.match(src, /return module\.exports/)
   assert.match(src, /conversation\.view/)
