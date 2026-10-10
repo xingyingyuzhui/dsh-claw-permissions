@@ -1,6 +1,6 @@
 {
   "name": "dsh-claw-permissions",
-  "version": "0.3.0-rc.1",
+  "version": "0.3.0-rc.2",
   "description": "Layered session permissions for DeepSeek Harness. 有效权限 = 官方 ∩ Agent ∩ 本会话；Claw 会话钉官方沙箱（只紧不松）。",
   "keywords": [
     "dsh",
@@ -47,8 +47,8 @@
     "test": "npm run build:check && node --test test/*.test.mjs"
   },
   "dependencies": {
-    "dsh-claw-core": "0.3.0-rc.1",
-    "dsh-claw-policy": "0.3.0-rc.1"
+    "dsh-claw-core": "0.3.0-rc.2",
+    "dsh-claw-policy": "0.3.0-rc.2"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh": "^0.2.0-rc.1"
