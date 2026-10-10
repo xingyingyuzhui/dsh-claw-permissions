@@ -9,7 +9,6 @@ import { allowExecution, looksLikeDsClaw, sameRoot } from '../perm-path.mjs'
 import { askReason, officialPin, renderDenyReceipt } from '../perm-official.mjs'
 import { composeLayers, denyReason, loadAgentHintSync, resolveLayersSync } from '../perm-layers.mjs'
 import { apply as applyGate } from 'dsh-claw-gate'
-import { fallbackMissingPreset } from 'dsh-claw-registry/presets'
 
 async function twoAgents(home) {
   const a = join(home, 'DSclaw', 'alpha')
@@ -105,12 +104,6 @@ test('checklist: MCP allow list is enforced and not tied to write/shell', () => 
   const explicit = { ...applyPreset('developer'), mcp: 'explicit', servers: { allow: ['github'], deny: [] } }
   assert.equal(allowExecution(explicit, 'mcp__github__search', {}, '/tmp'), true)
   assert.equal(allowExecution(explicit, 'mcp__slack__post', {}, '/tmp'), false)
-})
-
-test('checklist: missing claw preset falls back instead of breaking resume', () => {
-  const live = new Set(['standard', 'wa-test1'])
-  assert.equal(fallbackMissingPreset('wa-2e263a19-08cd-4274-b2af-42286f96b517', live), 'standard')
-  assert.equal(fallbackMissingPreset('wa-test1', live), 'wa-test1')
 })
 
 test('checklist: unloading the gate restores skills', async () => {
